@@ -1,0 +1,78 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+variables:
+  repositoryImage: pruebabhd
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+
+# 1. Instalar Python y dependencias
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+    addToPath: true
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+  displayName: 'Instalar dependencias'
+
+# 2. Imprimir "Hola Mundo" 10 veces en paralelo y crear archivos con fecha
+- task: Bash@3
+  inputs:
+    targetType: 'filePath'
+    filePath: 'scripts/scripts.sh' 
+    workingDirectory: '$(Build.SourcesDirectory)'  # Carpeta raíz del código
+
+# 3. Análisis de SonarQube
+- task: SonarQubePrepare@5
+  inputs:
+    SonarQube: 'sonarqube.pruebaBHD.com' 
+    scannerMode: 'CLI'
+    configMode: 'file'
+    configFile: 'sonar-project.properties'
+
+- task: SonarQubeAnalyze@5
+  displayName: "Ejecutar análisis de SonarQube"
+
+# 4. Publicar resultados de SonarQube
+- task: SonarQubePublish@5
+  inputs:
+    pollingTimeoutSec: '300'
+
+# 5. Condicional basado en Quality Gate de SonarQube
+- script: |
+    if [ "$(SONARQUBEQUALITYGATE)" == "OK" ]; then
+      echo "Pruebas pasadas"
+    else
+      echo "No se pasaron las pruebas del SonarQube"
+      exit 1
+    fi
+  displayName: 'Verificar SonarQube Quality Gate'
+
+# 6. Iniciar un contenedor de Redis usando Docker
+- task: Bash@3
+  displayName: "Iniciar Redis usando Docker"
+  inputs:
+    targetType: 'inline'
+    script: |
+      docker run -d --name redis -p 6379:6379 redis
+
+# 7. Ejecutar la aplicación Flask
+- task: Bash@3
+  displayName: "Ejecutar la aplicación Flask"
+  inputs:
+    targetType: 'inline'
+    script: |
+      python app.py &
+      sleep 10  # Esperar a que el servidor Flask se inicie
+
+# 8. Pruebas opcionales para validar el despliegue (curl para verificar que la app Flask funciona)
+- script: |
+    curl http://localhost:5000/
+  displayName: 'Probar la aplicación Flask'
