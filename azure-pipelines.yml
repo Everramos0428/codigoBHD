@@ -1,0 +1,65 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+variables:
+  repositoryImage: pruebabhd
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+#Ejecutar scripts 
+steps:
+- task: Bash@3
+  inputs:
+    targetType: 'filePath'
+    filePath: 'scripts/scripts.sh'  # Ruta al archivo de script en tu repositorio
+    workingDirectory: '$(Build.SourcesDirectory)'  # Carpeta raíz del código
+    failOnStderr: true
+
+
+
+# 1. Instalar Python y dependencias
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+    addToPath: true
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+  displayName: 'Instalar dependencias'
+
+# 2. Imprimir "Hola Mundo" 10 veces en paralelo y crear archivos con fecha
+- task: Bash@3
+  inputs:
+    targetType: 'filePath'
+    filePath: 'scripts/scripts.sh'  # Ruta al script Bash en tu repositorio
+    workingDirectory: '$(Build.SourcesDirectory)'  # Carpeta raíz del código
+
+# 3. Iniciar un contenedor de Redis usando Docker
+- task: Bash@3
+  displayName: "Iniciar Redis usando Docker"
+  inputs:
+    targetType: 'inline'
+    script: |
+      docker run -d --name redis -p 6379:6379 redis
+
+# 4. Ejecutar la aplicación Flask
+- task: Bash@3
+  displayName: "Ejecutar la aplicación Flask"
+  inputs:
+    targetType: 'inline'
+    script: |
+      python app.py &
+      sleep 10  # Esperar a que el servidor Flask se inicie
+
+# 5. Despliegue de la aplicación (Opcional: Puedes añadir tu despliegue a un servidor real)
+# Si deseas realizar despliegue a un entorno de producción, puedes agregar tareas para Kubernetes o Azure App Service.
+
+# 6. Pruebas opcionales para validar el despliegue (curl para verificar que la app Flask funciona)
+- script: |
+    curl http://localhost:5000/
+  displayName: 'Probar la aplicación Flask'
